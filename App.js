@@ -1,5 +1,6 @@
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';  
+console.log("API URL:", process.env.EXPO_PUBLIC_API_BASE_URL);
 
 export default function App() {
   return (
