@@ -6,6 +6,7 @@ import {
   Pressable,
   StyleSheet,
   ActivityIndicator,
+  RefreshControl, // Yenileme kontrolü eklendi
 } from 'react-native';
 import { api } from '../api/client';
 
@@ -15,34 +16,54 @@ export default function ProfilesListScreen({ navigation }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [hasMore, setHasMore] = useState(true);
+  const [refreshing, setRefreshing] = useState(false); // Yenileme durumu
 
   const fetchProfiles = async () => {
-    // Eğer zaten yükleniyorsa veya yüklenecek başka veri kalmadıysa işlem yapma
     if (loading || !hasMore) return;
 
     setLoading(true);
     setError(null);
 
     try {
-      // Sayfa numarasına göre veriyi çek
       const res = await api.get(`/profiles?page=${page}&limit=10`);
 
       if (res.data.length === 0) {
         setHasMore(false);
       } else {
-        // Eski profillerin üzerine yenilerini ekle
         setProfiles((prev) => [...prev, ...res.data]);
         setPage((prev) => prev + 1);
       }
     } catch (err) {
-      setError('Profiller yüklenemedi. Bağlantınızı kontrol edin.');
-      console.error(err);
+      // Hata mesajını API'den gelen düzenlenmiş mesajdan alıyoruz
+      setError(err.message || 'Profiller yüklenemedi.');
     } finally {
       setLoading(false);
     }
   };
 
-  // Ekran ilk açıldığında çalışır
+  // Aşağı çekince çalışacak fonksiyon
+  const onRefresh = async () => {
+    setRefreshing(true);
+    // State'leri sıfırla
+    setProfiles([]);
+    setPage(1);
+    setHasMore(true);
+    setError(null);
+    
+    // Veriyi tekrar çek (farklı bir mantıkla çağırıyoruz)
+    try {
+        // İlk sayfayı çekiyoruz manuel olarak
+        const res = await api.get(`/profiles?page=1&limit=10`);
+        setProfiles(res.data);
+        setPage(2);
+        if (res.data.length === 0) setHasMore(false);
+    } catch (err) {
+        setError(err.message || 'Yenileme başarısız');
+    } finally {
+        setRefreshing(false);
+    }
+  };
+
   useEffect(() => {
     fetchProfiles();
   }, []);
@@ -66,7 +87,26 @@ export default function ProfilesListScreen({ navigation }) {
     );
   };
 
-  // Hata durumunda gösterilecek ekran
+  const renderEmpty = () => {
+    if (loading) return null;
+    return (
+        <View style={styles.emptyContainer}>
+            <Text style={styles.emptyText}>Hiç profil bulunamadı</Text>
+        </View>
+    );
+  };
+
+  // İlk yükleme animasyonu (Sayfa boşken)
+  if (loading && profiles.length === 0) {
+    return (
+      <View style={styles.centerContainer}>
+        <ActivityIndicator size="large" color="#007AFF" />
+        <Text style={styles.loadingText}>Profiller yükleniyor...</Text>
+      </View>
+    );
+  }
+
+  // Sadece hata varsa ve hiç veri yoksa gösterilecek ekran
   if (error && profiles.length === 0) {
     return (
       <View style={styles.centerContainer}>
@@ -84,10 +124,14 @@ export default function ProfilesListScreen({ navigation }) {
         data={profiles}
         keyExtractor={(item) => item.id.toString()}
         renderItem={renderItem}
-        onEndReached={fetchProfiles} // Listenin sonuna gelince tetiklenir
+        onEndReached={fetchProfiles}
         onEndReachedThreshold={0.5}
         ListFooterComponent={renderFooter}
+        ListEmptyComponent={renderEmpty}
         contentContainerStyle={styles.listContent}
+        refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
       />
     </View>
   );
@@ -100,6 +144,7 @@ const styles = StyleSheet.create({
   },
   listContent: {
     padding: 16,
+    flexGrow: 1, // Boş ekranın ortalanması için önemli
   },
   card: {
     backgroundColor: 'white',
@@ -131,6 +176,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 50,
+  },
+  emptyText: {
+    fontSize: 16,
+    color: '#666',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#666',
   },
   errorText: {
     fontSize: 16,
